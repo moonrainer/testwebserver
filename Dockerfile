@@ -16,6 +16,7 @@ LABEL name="testwebserver" \
       summary="Acme Corp's Starter app" \
       description="Starter app will do ....."
 
+COPY licenses /licenses
 
 ### Atomic Help File - Write in Markdown, it will be converted to man format at build time.
 ### https://github.com/projectatomic/container-best-practices/blob/master/creating/help.adoc
