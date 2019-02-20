@@ -1,48 +1,71 @@
-## Simple webserver container 
-# Using RHEL 7 base image and Apache Web server
-# Version 1
-
-# Pull the rhel image from the local repository
 FROM registry.access.redhat.com/rhel7
-#FROM rhel7:latest
-MAINTAINER <admin@example.com>
 
-### Add Atomic/OpenShift Labels - https://github.com/projectatomic/ContainerApplicationGenericLabels#####
-LABEL name="testwebserver" \
-      vendor="Example Inc" \
-      version="1.0" \
-      release="1" \
-      run='docker run -d -p 8080:80 --name=testweb testwebserver' \
-      summary="Acme Corp's Starter app" \
-      description="Starter app will do ....."
+MAINTAINER Tremolo Security, Inc. - Docker <docker@tremolosecurity.com>
 
-### COPY licenses /licenses
+ENV BUILDER_VERSION=1.0 \
+    JDK_VERSION=1.8.0 \
+    MAVEN_VERSION=3.3.9 \
+    OPENUNISON_VERSION="1.0.15"
 
-### Atomic Help File - Write in Markdown, it will be converted to man format at build time.
-### https://github.com/projectatomic/container-best-practices/blob/master/creating/help.adoc
-COPY help.md /tmp/help.md
+LABEL name="OpenUnison" \
+      vendor="Tremolo Security, Inc." \
+      version="1.0.15" \
+      release="2018070601" \
+### Recommended labels below
+      url="https://www.tremolosecurity.com/unison/" \
+      summary="Platform for building Tremolo Security OpenUnison" \
+      description="OpenUnison is an identity management platforms that can provide solutions for applications and infrastructure. Services include user provisioning, web access management & SSO, LDAP virtual directory and a user self service portal." \
+      run='docker run -tdi -p 443:8443 -p 80:8080 -v /tmp/ou/etc:/etc/openunison:Z --name ${NAME} ${IMAGE}' \
+      io.k8s.description="Cloud Native Identity Management" \
+      io.k8s.display-name="OpenUnison Builder 1.0.14  " \
+      io.openshift.expose-services="8080:http,8443:https" \
+      io.openshift.tags="identity management,sso,user provisioning,devops,saml,openid connect" \
+      io.openshift.tags="builder,1.0.14,sso,identity management" \
+      io.openshift.s2i.scripts-url="image:///usr/local/bin/s2i"
 
+ADD metadata/help.md /tmp/help.md
+COPY licenses /licenses
 
-### Add necessary Red Hat repos here
-RUN REPOLIST=rhel-7-server-rpms,rhel-7-server-optional-rpms \
-### Add your package needs here
-    INSTALL_PKGS="golang-github-cpuguy83-go-md2man" && \
-###yum -y update-minimal --disablerepo "*" --enablerepo rhel-7-server-rpms --setopt=tsflags=nodocs \
-###   --security --sec-severity=Important --sec-severity=Critical && \
+RUN REPOLIST="rhel-7-server-rpms,rhel-7-server-optional-rpms" && \
+    INSTALL_PKGS="golang-github-cpuguy83-go-md2man wget which java-${JDK_VERSION}-openjdk-devel.x86_64 unzip tar" && \
+    yum clean all && yum-config-manager --disable \* &> /dev/null && \
+    ### Add necessary Red Hat repos here
+    yum -y update-minimal --disablerepo "*" --enablerepo rhel-7-server-rpms --setopt=tsflags=nodocs \
+    --security --sec-severity=Important --sec-severity=Critical && \
     yum -y install --disablerepo "*" --enablerepo ${REPOLIST} --setopt=tsflags=nodocs ${INSTALL_PKGS} && \
-### help file markdown to man conversion
-    go-md2man -in /tmp/help.md -out /help.1 && \
-    yum clean all
+    mkdir -p /etc/openunison && \
+    mkdir -p /etc/openunison-local && \
+    mkdir -p /usr/local/openunison && \
+    groupadd -r openunison -g 433 && \
+    useradd -u 431 -r -g openunison -d /usr/local/openunison -s /sbin/nologin -c "OpenUnison Docker image user" openunison && \
+    mkdir -p /usr/local/openunison/work && \
+    mkdir -p /usr/local/openunison/war && \
+    mkdir -p /usr/local/openunison/config && \
+    mkdir -p /usr/local/openunison/quartz && \
+    mkdir -p /usr/local/openunison/amq && \
+    mkdir -p /usr/local/openunison/bin && \
+    go-md2man -in /tmp/help.md -out /help.1 && yum -y remove golang-github-cpuguy83-go-md2man && \
+    rm -rf /var/cache/yum
 
-# Update and install the application
-#COPY help.1 /help.1
-#RUN yum update -y
-RUN yum -y install --disablerepo "*" --enablerepo "rhel-7-server-rpms" httpd
+ADD run_openunison.sh /usr/local/openunison/bin/run_openunison.sh
+ADD check_alive.py /usr/local/openunison/bin/check_alive.py
 
-RUN echo "This container image was build on:" > /var/www/html/index.html
-RUN date >> /var/www/html/index.html
+
+
+# Copy the S2I scripts to /usr/local/bin since I updated the io.openshift.s2i.scripts-url label
+COPY ./s2i/bin/ /usr/local/bin/s2i
+
+RUN chown -R openunison:openunison \
+    /etc/openunison \
+    /etc/openunison-local \
+    /usr/local/openunison \
+  && chmod +x /usr/local/openunison/bin/*
+
+VOLUME /etc/openunison
+
+USER 431
+
 EXPOSE 8080
+EXPOSE 8443
 
-# Start the service
-CMD ["-D", "FOREGROUND"]
-ENTRYPOINT ["/usr/sbin/httpd"]
+CMD ["usage"]
