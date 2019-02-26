@@ -1,0 +1,36 @@
+# jogetworkflow/joget-openshift
+FROM registry.redhat.io/jboss-webserver-3/webserver31-tomcat8-openshift
+MAINTAINER dev@joget.org
+
+### Required Atomic/OpenShift Labels - https://github.com/projectatomic/ContainerApplicationGenericLabels#####
+LABEL name="Joget Workflow Enterprise for OpenShift" \
+      maintainer="dev@joget.org" \
+      vendor="Joget Inc" \
+      version="6.0.15" \
+      release="2" \
+      summary="OpenShift Docker image for Joget Workflow Enterprise" \
+      description="OpenShift Docker image for Joget Workflow Enterprise" \
+      usage=""
+
+# set environment variables
+ENV JOGET_WAR jw.war
+ENV ASPECTJ_JAR aspectjweaver-1.8.5.jar
+ENV JOGET_HOME /opt/joget/
+ENV WFLOW_HOME /opt/joget/wflow/
+ENV JAVA_OPTS $JAVA_OPTS -Dwflow.home=${WFLOW_HOME} -javaagent:${JOGET_HOME}/${ASPECTJ_JAR}
+
+# copy licenses
+COPY licenses /licenses
+
+# copy installer and scripts
+COPY ${JOGET_WAR} /deployments/jw.war
+COPY ${ASPECTJ_JAR} ${JOGET_HOME}
+
+# change directory permission
+USER root
+RUN chown -R jboss:0 /opt/joget ; \
+    chmod -R g+rw /opt/joget
+USER jboss
+
+# Expose the ports we're interested in
+EXPOSE 8080
